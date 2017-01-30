@@ -29,6 +29,23 @@
 			#view-source:hover, #view-source:active {
 				background-color: #1976D2;
 			}
+			#time {
+				position: absolute;
+				width: 100px;
+				height: 50px;
+				left: calc(50% - 50px);
+				top: 0;
+				display: table;
+				user-select: none;
+				cursor: none;
+			}
+			#time span {
+				display: table-cell;
+				vertical-align: middle;
+				text-align: center;
+				font-weight: 800;
+				font-size: 36px;
+			}
 			#connecting {
 				position: absolute;
 				width: 200px;
@@ -52,6 +69,9 @@
 		</style>
 	</head>
 	<body>
+		<div id="time">
+			<span>00:00</span>
+		</div>
 		<div id="connecting">
 			<span>Connecting to server...</span>
 		</div>
@@ -74,7 +94,9 @@
 			var paths, hasPath;
 			
 			var picker;
-			var socket, connected, message;
+			var socket, connected;
+			
+			var message, time;
 
 			function init() {
 				canvas = document.getElementById("game");
@@ -86,7 +108,7 @@
 				
 				paths = new Array();
 				hasPath = false;
-				cursorRadius = 0.005;
+				cursorRadius = 0.01;
 				cursorColour = "#000000";
 				cursorDown = false;
 
@@ -100,7 +122,9 @@
 				});
 				
 				message = document.getElementById("connecting");
+				time = document.getElementById("time");
 
+				updateTime(0);
 				connect();
 			}
 			
@@ -115,6 +139,7 @@
 				socket.onclose = function() {
 					message.style.display = "table";
 					paths.splice(0, paths.length);
+					updateTime(0);
 					connected = false;
 					setTimeout(function() {
 						connect();
@@ -142,11 +167,29 @@
 							}
 						} else if(json.type == "reset") {
 							paths.splice(0, paths.length);
+						} else if(json.type == "time") {
+							var time = json.time;
+							updateTime(time);
 						}
 					} catch(e) {
 						console.log((new Date()) + ": Error decoding incoming packet");
 					}
 				};
+			}
+			
+			function updateTime(timeLeft) {
+				function n(n){
+					return n > 9 ? "" + n: "0" + n;
+				}
+				var minutes = Math.floor(timeLeft / 60);
+				var seconds = timeLeft - (minutes * 60);
+				var span = time.getElementsByTagName("span")[0];
+				span.innerHTML = n(minutes) + ":" + n(seconds);
+				if(minutes == 0 && seconds <= 10) {
+					span.style.color = "#D32F2F";
+				} else {
+					span.style.color = "#000000";
+				}
 			}
 			
 			function drawPath(points, radius, colour) {
@@ -331,16 +374,12 @@
 			
 			function mouseWheel(e) {
 				if(e.deltaY > 0) {
-					if(cursorRadius < 0.5) {
-						cursorRadius *= 1.5;
-					}
+					cursorRadius = Math.min(cursorRadius * 2, 0.256);
 					if(hasPath) {
 						beginPath();
 					}
 				} else if(e.deltaY < 0) {
-					if(cursorRadius > 0.005) {
-						cursorRadius /= 1.5;
-					}
+					cursorRadius = Math.max(cursorRadius / 2, 0.004);
 					if(hasPath) {
 						beginPath();
 					}

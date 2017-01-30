@@ -29,8 +29,10 @@ if(cfg.ssl) {
 var clients = [];
 var paths = [];
 var latest = 0;
+var cycle = 60 * 5;
+var timer = cycle;
 
-resetCanvas();
+update();
 
 wsServer = new WebSocketServer({httpServer: server});
 wsServer.on("request", function(request) {
@@ -40,12 +42,11 @@ wsServer.on("request", function(request) {
 	
 	console.log((new Date()) + ": User connected (" + request.remoteAddress + ")");
 	
+	sendTime(connection, timer);
+	
 	if(paths.length > 0) {
 		for(var i = 0; i < paths.length; i++) {
-			connection.sendUTF(JSON.stringify({
-				type: "path",
-				path: paths[i]
-			}));
+			sendPath(connection, paths[i]);
 		}
 	}
 	
@@ -74,20 +75,17 @@ wsServer.on("request", function(request) {
 					if(points.length == 0) {
 						return;
 					}
+					var radius = Math.max(Math.min(json.path.radius, 0.256), 0.004);
 					var path = {
 						id: latest++,
 						client: id,
 						colour: json.path.colour,
-						radius: json.path.radius,
+						radius: radius,
 						points: points
 					};
 					paths.push(path);
 					for(var i = 0; i < clients.length; i++) {
-						var client = clients[i];
-						client.sendUTF(JSON.stringify({
-							type: "path",
-							path: path
-						}));
+						sendPath(clients[i], path);
 					}
 				} else if(json.type === "point") {
 					if(json.point == undefined) {
@@ -104,17 +102,12 @@ wsServer.on("request", function(request) {
 					if(path != undefined) {
 						path.points.push(json.point);
 						for(var i = 0; i < clients.length; i++) {
-							var client = clients[i];
-							client.sendUTF(JSON.stringify({
-								type: "point",
-								path: path.id,
-								point: json.point,
-							}));
+							sendPoint(clients[i], path, json.point);
 						}
 					}
 				}
 			} catch(e) {
-				console.log((new Date()) + ": Invalid packet from client " + id + ": " + e.message, e.stack);
+				console.log((new Date()) + ": Invalid packet from client " + id + ": " + e.message);
 				return;
 			}
 		}
@@ -125,6 +118,32 @@ wsServer.on("request", function(request) {
 		console.log((new Date()) + ": User disconnected");
 	});
 });
+
+function sendPath(client, path) {
+	client.sendUTF(JSON.stringify({
+		type: "path",
+		path: path
+	}));
+}
+
+function sendPoint(client, path, point) {
+	client.sendUTF(JSON.stringify({
+		type: "point",
+		path: path.id,
+		point: point,
+	}));
+}
+
+function update() {
+	for(var i = 0; i < clients.length; i++) {
+		sendTime(clients[i], timer);
+	}
+	if(timer == 0) {
+		resetCanvas();
+		timer = cycle;
+	} else timer--;
+	setTimeout(update, 1000);
+}
 
 function resetCanvas() {
 	if(paths.length > 0) {
@@ -137,7 +156,11 @@ function resetCanvas() {
 		}
 		console.log((new Date()) + ": Canvas reset");
 	}
-	setTimeout(function() {
-		resetCanvas();
-	}, 2 * 60 * 1000);
+}
+
+function sendTime(client, timer) {
+	client.sendUTF(JSON.stringify({
+		type: "time",
+		time: timer
+	}));
 }
